@@ -31,13 +31,7 @@ app.get("/webhook", (req, res) => {
 });
 
 /* ---------------- SEND MESSAGE FUNCTION ---------------- */
-app.post("/send-message", async (req, res) => {
-    const { to, text } = req.body;
-
-    if (!to || !text) {
-        return res.status(400).json({ error: "Missing 'to' or 'text' field" });
-    }
-
+async function sendMessage(to, text) {
     const url = `https://graph.facebook.com/v${process.env.WHATSAPP_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
 
     try {
@@ -56,10 +50,26 @@ app.post("/send-message", async (req, res) => {
 
         const data = await response.text();
         console.log("Send API response:", data);
-        res.status(200).json({ message: "Message sent successfully" });
+        return { success: true, data };
     } catch (err) {
         console.error("Error sending message:", err);
-        res.status(500).json({ error: "Failed to send message" });
+        return { success: false, error: err.message };
+    }
+}
+
+app.post("/send-message", async (req, res) => {
+    const { to, text } = req.body;
+
+    if (!to || !text) {
+        return res.status(400).json({ error: "Missing 'to' or 'text' field" });
+    }
+
+    const result = await sendMessage(to, text);
+    
+    if (result.success) {
+        res.status(200).json({ message: "Message sent successfully" });
+    } else {
+        res.status(500).json({ error: "Failed to send message", details: result.error });
     }
 });
 
@@ -84,10 +94,19 @@ app.post("/webhook", async (req, res) => {
             const from = msg.from;
             const text = msg.text?.body;
 
+            if (!text) continue;
+
             console.log(`Message from ${from}: ${text}`);
 
             // ---------------- AUTO REPLY ----------------
-            await sendMessage(from, "Hello I received your message");
+            try {
+                const result = await sendMessage(from, "Hello I received your message");
+                if (!result.success) {
+                    console.error(`Failed to send auto-reply to ${from}:`, result.error);
+                }
+            } catch (err) {
+                console.error(`Error sending auto-reply to ${from}:`, err);
+            }
         }
     }
 });
