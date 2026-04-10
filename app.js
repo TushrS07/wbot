@@ -1,15 +1,22 @@
 import express from "express";
 import bodyParser from "body-parser";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const app = express();
 app.use(bodyParser.json());
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 
+/* ---------------- HEALTH CHECK ---------------- */
 app.get("/health", (req, res) => {
-    res.status(200).send({ message: "Server is healthy" });
+    res.status(200).json({ message: "Server is healthy" });
 });
 
+/* ---------------- WEBHOOK VERIFY (META) ---------------- */
 app.get("/webhook", (req, res) => {
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
@@ -17,35 +24,76 @@ app.get("/webhook", (req, res) => {
 
     if (mode === "subscribe" && token === VERIFY_TOKEN) {
         console.log("Webhook verified!");
-        res.status(200).send(challenge);
-    } else {
-        res.sendStatus(403);
+        return res.status(200).send(challenge);
     }
+
+    return res.sendStatus(403);
 });
 
-app.post("/webhook", (req, res) => {
-    console.log("Received webhook event:", req.body);
-    const body = req.body;
+/* ---------------- SEND MESSAGE FUNCTION ---------------- */
+app.post("/send-message", async (req, res) => {
+    const { to, text } = req.body;
 
-    if (body.object === "whatsapp_business_account") {
-        body.entry?.forEach((entry) => {
-            entry.changes?.forEach((change) => {
-                const value = change.value;
-                const messages = value?.messages;
+    if (!to || !text) {
+        return res.status(400).json({ error: "Missing 'to' or 'text' field" });
+    }
 
-                if (messages && messages.length > 0) {
-                    const msg = messages[0];
-                    const from = msg.from;
-                    const text = msg.text?.body;
+    const url = `https://graph.facebook.com/v${process.env.WHATSAPP_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
 
-                    console.log(`Message from ${from}: ${text}`);
-                }
-            });
+    try {
+        const response = await fetch(url, {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to,
+                text: { body: text }
+            })
         });
 
-        return res.sendStatus(200);
+        const data = await response.text();
+        console.log("Send API response:", data);
+        res.status(200).json({ message: "Message sent successfully" });
+    } catch (err) {
+        console.error("Error sending message:", err);
+        res.status(500).json({ error: "Failed to send message" });
     }
-    return res.sendStatus(404);
 });
 
-app.listen(3000, () => console.log("Server running on port 3000"));
+
+/* ---------------- WEBHOOK RECEIVE ---------------- */
+app.post("/webhook", async (req, res) => {
+    // respond FAST to Meta
+    res.sendStatus(200);
+
+    console.log("Webhook event:", JSON.stringify(req.body, null, 2));
+
+    const body = req.body;
+
+    if (body.object !== "whatsapp_business_account") return;
+
+    for (const entry of body.entry || []) {
+        for (const change of entry.changes || []) {
+            const msg = change.value?.messages?.[0];
+
+            if (!msg) continue;
+
+            const from = msg.from;
+            const text = msg.text?.body;
+
+            console.log(`Message from ${from}: ${text}`);
+
+            // ---------------- AUTO REPLY ----------------
+            await sendMessage(from, "Hello I received your message");
+        }
+    }
+});
+
+/* ---------------- START SERVER ---------------- */
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
