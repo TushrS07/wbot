@@ -49,7 +49,7 @@ async function sendMessage(to, text) {
         });
 
         const data = await response.text();
-        console.log("Send API response:", data);
+        // console.log("Send API response:", data);
         return { success: true, data };
     } catch (err) {
         console.error("Error sending message:", err);
@@ -79,7 +79,7 @@ app.post("/webhook", async (req, res) => {
     // respond FAST to Meta
     res.sendStatus(200);
 
-    console.log("Webhook event:", JSON.stringify(req.body, null, 2));
+    // console.log("Webhook event:", JSON.stringify(req.body, null, 2));
 
     const body = req.body;
 
@@ -96,7 +96,7 @@ app.post("/webhook", async (req, res) => {
 
             if (!text) continue;
 
-            console.log(`Message from ${from}: ${text}`);
+            // console.log(`Message from ${from}: ${text}`);
 
             // ---------------- AUTO REPLY ----------------
             try {
