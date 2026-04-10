@@ -6,6 +6,9 @@ app.use(bodyParser.json());
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
+app.get("/health", (req, res) => {
+    res.status(200).send({ message: "Server is healthy" });
+});
 
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
@@ -40,8 +43,8 @@ app.post("/webhook", (req, res) => {
     });
 
     res.sendStatus(200); 
-    res.sendStatus(404);
-  }
+}
+res.sendStatus(404);
 });
 
 app.listen(3000, () => console.log("Server running on port 3000"));
